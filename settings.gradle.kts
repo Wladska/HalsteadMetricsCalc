@@ -1,2 +1,2 @@
-rootProject.name = "CodeGenClash"
+rootProject.name = "HalsteadMetrics"
 

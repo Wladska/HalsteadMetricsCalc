@@ -1,19 +1,29 @@
 package org.wladska;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class Main {
-
 	public static void main(String[] args) {
-		// Specify the path to your Java file
-		String filePath = "YourJavaFile.java";
+		if (args.length != 1) {
+			System.err.println("Usage: java HalsteadMetrics <file_path>");
+			return;
+		}
+
+		String filePath = args[0];
+		File file = new File(filePath);
+
+		if (!file.exists()) {
+			System.err.println("Error: File does not exist.");
+			return;
+		}
+
 		try {
 			String code = readCodeFromFile(filePath);
-			if (code != null && !code.isEmpty()) {
+			if (!code.isEmpty()) {
 				HalsteadMetrics metrics = calculateHalsteadMetrics(code);
 				System.out.println("Halstead Metrics:");
 				System.out.println("Program length (N): " + metrics.getProgramLength());
@@ -25,7 +35,7 @@ public class Main {
 				System.out.println("Number of delivered bugs (B): " + metrics.getNumberOfDeliveredBugs());
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			System.err.println("Error: Exception occurred: " + e);
 		}
 	}
 
@@ -41,22 +51,40 @@ public class Main {
 		return code.toString();
 	}
 
-	private static HalsteadMetrics calculateHalsteadMetrics(String code) {
+	public static HalsteadMetrics calculateHalsteadMetrics(String code) {
 		Set<String> uniqueOperators = new HashSet<>();
 		Set<String> uniqueOperands = new HashSet<>();
 		String[] tokens = code.split("\\s+|\\b");
 
+		tokens = Arrays.stream(tokens)
+				.filter(token -> !token.isEmpty())
+				.toArray(String[]::new);
+
 		int N1 = 0; // Total number of operators
 		int N2 = 0; // Total number of operands
 
-		for (String token : tokens) {
-			if (isOperator(token)) {
-				uniqueOperators.add(token);
+		int uniqueOperandOffset = 0;
+		for (int i = 0; i < tokens.length; i++) {
+			Pair unaryOperator = isUnaryOperator(tokens[i]);
+			if (!unaryOperator.first.isEmpty() || isOperator(tokens[i])) {
+				uniqueOperators.add(unaryOperator.first.isEmpty() ? tokens[i] : unaryOperator.first);
 				N1++;
-			} else if (isOperand(token)) {
-				uniqueOperands.add(token);
-				N2++;
+
+				if (isOperator(tokens[i])) {
+					if (uniqueOperandOffset <= 0) {
+						uniqueOperands.add(tokens[i-1]);
+						uniqueOperands.add(tokens[i+1]);
+						N2 += 2;
+					} else {
+						uniqueOperands.add(tokens[i+1]);
+						N2++;
+					}
+					uniqueOperandOffset = 3;
+				} else {
+					N2++;
+				}
 			}
+			uniqueOperandOffset--;
 		}
 
 		int n1 = uniqueOperators.size(); // Number of distinct operators
@@ -75,6 +103,28 @@ public class Main {
 				timeRequiredToProgram, numberOfDeliveredBugs);
 	}
 
+	private static Pair isUnaryOperator(String token) {
+		if (token.startsWith("--")) {
+			return new Pair("--expr", token.substring(2));
+		}
+		if (token.startsWith("++")) {
+			return new Pair("++expr", token.substring(2));
+		}
+		if (token.startsWith("~")) {
+			return new Pair("~expr", token.substring(1));
+		}
+		if (token.startsWith("!")) {
+			return new Pair("!expr", token.substring(1));
+		}
+		if (token.endsWith("--")) {
+			return new Pair("expr--", token.substring(0,token.length()-1));
+		}
+		if (token.endsWith("++")) {
+			return new Pair("expr++", token.substring(0,token.length()-1));
+		}
+		return new Pair();
+	}
+
 	private static boolean isOperator(String token) {
 		String[] operators = {"*", "/", "%", "+", "-", "<<", ">>", ">>>", "<", ">", "<=", ">=", "instanceof", "==",
 							  "!=", "&", "^", "|", "&&", "||", "?", ":", "=", "+=", "-=" , "*=", "/=", "%=", "&=",
@@ -84,10 +134,6 @@ public class Main {
 				return true;
 			}
 		}
-		return token.matches("(--|\\+\\+|~|!)\\w+|\\w+(--|\\+\\+)"); // check if unary operator
-	}
-
-	private static boolean isOperand(String token) {
-		return token.matches("[a-zA-Z_][a-zA-Z0-9_]*");
+		return false;
 	}
 }
